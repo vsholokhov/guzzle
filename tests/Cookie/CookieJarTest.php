@@ -1,11 +1,10 @@
 <?php
-
 namespace GuzzleHttp\Tests\CookieJar;
 
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\Cookie\SetCookie;
-use GuzzleHttp\Message\Request;
-use GuzzleHttp\Message\Response;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 
 /**
  * @covers GuzzleHttp\Cookie\CookieJar
@@ -29,12 +28,6 @@ class CookieJarTest extends \PHPUnit_Framework_TestCase
         ];
     }
 
-    public function testQuotesBadCookieValues()
-    {
-        $this->assertEquals('foo', CookieJar::getCookieValue('foo'));
-        $this->assertEquals('"foo,bar"', CookieJar::getCookieValue('foo,bar'));
-    }
-
     public function testCreatesFromArray()
     {
         $jar = CookieJar::fromArray([
@@ -42,6 +35,19 @@ class CookieJarTest extends \PHPUnit_Framework_TestCase
             'baz' => 'bam'
         ], 'example.com');
         $this->assertCount(2, $jar);
+    }
+
+    public function testGetsCookiesByName()
+    {
+        $cookies = $this->getTestCookies();
+        foreach ($this->getTestCookies() as $cookie) {
+            $this->jar->setCookie($cookie);
+        }
+
+        $testCookie = $cookies[0];
+        $this->assertEquals($testCookie, $this->jar->getCookieByName($testCookie->getName()));
+        $this->assertNull($this->jar->getCookieByName("doesnotexist"));
+        $this->assertNull($this->jar->getCookieByName(""));
     }
 
     /**
@@ -128,8 +134,22 @@ class CookieJarTest extends \PHPUnit_Framework_TestCase
         ))));
     }
 
+    public function testDoesNotAddEmptyCookies()
+    {
+        $this->assertFalse($this->jar->setCookie(new SetCookie(array(
+            'Name'   => '',
+            'Domain' => 'foo.com',
+            'Value'  => 0
+        ))));
+    }
+
     public function testDoesAddValidCookies()
     {
+        $this->assertTrue($this->jar->setCookie(new SetCookie(array(
+            'Name'   => '0',
+            'Domain' => 'foo.com',
+            'Value'  => 0
+        ))));
         $this->assertTrue($this->jar->setCookie(new SetCookie(array(
             'Name'   => 'foo',
             'Domain' => 'foo.com',
@@ -286,13 +306,13 @@ class CookieJarTest extends \PHPUnit_Framework_TestCase
         }
 
         $request = new Request('GET', $url);
-        $this->jar->addCookieHeader($request);
-        $this->assertEquals($cookies, $request->getHeader('Cookie'));
+        $request = $this->jar->withCookieHeader($request);
+        $this->assertEquals($cookies, $request->getHeaderLine('Cookie'));
     }
 
     /**
      * @expectedException \RuntimeException
-     * @expectedExceptionMessage Invalid cookie: Cookie name must not cannot invalid characters:
+     * @expectedExceptionMessage Invalid cookie: Cookie name must not contain invalid characters: ASCII Control characters (0-31;127), space, tab and the following characters: ()<>@,;:\"/?={}
      */
     public function testThrowsExceptionWithStrictMode()
     {
